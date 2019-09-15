@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "noEmit": true
+  },
+  "files": [
+    "./karma.conf.js",
+    "./gulpfile.js"
+  ]
+}
