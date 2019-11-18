@@ -14,11 +14,13 @@ function updateClass(oldVnode: VNode, vnode: VNode): void {
   klass = klass || {};
 
   for (name in oldClass) {
+    // 以前的 vnode 上有的的 class, 但现在的vnode上没有的 class,要删掉
     if (!klass[name]) {
       elm.classList.remove(name);
     }
   }
   for (name in klass) {
+    // 现在 vnode 上有的 class,但以前vnode上没有的，要加上去
     cur = klass[name];
     if (cur !== oldClass[name]) {
       (elm.classList as any)[cur ? 'add' : 'remove'](name);

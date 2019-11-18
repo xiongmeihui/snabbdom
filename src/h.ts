@@ -24,11 +24,13 @@ export function h(sel: string, data: VNodeData, children: VNodeChildren): VNode;
 export function h(sel: any, b?: any, c?: any): VNode {
   var data: VNodeData = {}, children: any, text: any, i: number;
   if (c !== undefined) {
+    // c 存在的时候，b 一定存在且为 data
     data = b;
     if (is.array(c)) { children = c; }
     else if (is.primitive(c)) { text = c; }
     else if (c && c.sel) { children = [c]; }
   } else if (b !== undefined) {
+    // c 不存在的时候得判断 b 是 children 还是 data
     if (is.array(b)) { children = b; }
     else if (is.primitive(b)) { text = b; }
     else if (b && b.sel) { children = [b]; }
