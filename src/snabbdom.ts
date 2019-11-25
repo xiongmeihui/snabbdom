@@ -118,7 +118,7 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
       if (isUndef(vnode.text)) {
         vnode.text = "";
       }
-      // 创建评论
+      // 创建注释节点
       vnode.elm = api.createComment(vnode.text as string);
     } else if (sel !== undefined) {
       // Parse selector
@@ -158,6 +158,7 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
         if (i.insert) insertedVnodeQueue.push(vnode);
       }
     } else {
+      // 选择器不存在，表示为单纯的文本
       vnode.elm = api.createTextNode(vnode.text as string);
     }
     return vnode.elm;
@@ -251,7 +252,11 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
     let elmToMove: VNode;
     let before: any;
 
+    // 遍历 oldCh newCh，对节点进行比较和更新
+    // 每轮比较最多处理一个节点，算法复杂度 O(n)
     while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+      // 首先找到新 vnode 的 children 和旧 vnode 的 children 都存在的部分
+      // DFS
       if (oldStartVnode == null) {
         oldStartVnode = oldCh[++oldStartIdx]; // Vnode might have been moved left
       } else if (oldEndVnode == null) {
@@ -261,6 +266,7 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
       } else if (newEndVnode == null) {
         newEndVnode = newCh[--newEndIdx];
       } else if (sameVnode(oldStartVnode, newStartVnode)) {
+        // 新旧开始节点相同，直接调用 patchVnode 进行更新，下标向中间推进
         patchVnode(oldStartVnode, newStartVnode, insertedVnodeQueue);
         oldStartVnode = oldCh[++oldStartIdx];
         newStartVnode = newCh[++newStartIdx];
@@ -270,6 +276,15 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
         newEndVnode = newCh[--newEndIdx];
       } else if (sameVnode(oldStartVnode, newEndVnode)) {
         // Vnode moved right
+        // 旧开始节点等于新的结束节点，将该节点对应的 dom 移动到最后，调用 patchVnode 进行更新
+        // 旧开始节点等于新的结束节点，说明节点向右移动了
+        // 具体移动到哪，因为新节点处于末尾，所以添加到旧结束节点（会随着 updateChildren 左移）的后面
+        // 注意这里需要移动 dom，因为节点右移了，而为什么是插入 oldEndVnode 的后面呢？
+        // 可以分为两个情况来理解：
+        // 1. 当循环刚开始，下标都还没有移动，那移动到 oldEndVnode 的后面就相当于是最后面，是合理的
+        // 2. 循环已经执行过一部分了，因为每次比较结束后，下标都会向中间靠拢，而且每次都会处理一个节点,
+        // 这时下标左右两边已经处理完成，可以把下标开始到结束区域当成是并未开始循环的一个整体，
+        // 所以插入到 oldEndVnode 后面是合理的（在当前循环来说，也相当于是最后面，同 1）
         patchVnode(oldStartVnode, newEndVnode, insertedVnodeQueue);
         api.insertBefore(
           parentElm,
@@ -289,10 +304,15 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
         oldEndVnode = oldCh[--oldEndIdx];
         newStartVnode = newCh[++newStartIdx];
       } else {
+        // 如果以上 4 种情况都不匹配，可能存在下面 2 种情况
+        // 1. 这个节点是新创建的
+        // 2. 这个节点在原来的位置是处于中间的（oldStartIdx 和 oldEndIdx之间）
         if (oldKeyToIdx === undefined) {
           oldKeyToIdx = createKeyToOldIdx(oldCh, oldStartIdx, oldEndIdx);
         }
+        // 检查新的 vnode 是否存在于老的 vnode 中
         idxInOld = oldKeyToIdx[newStartVnode.key as string];
+        // 如果下标不存在，说明这个节点是新创建的
         if (isUndef(idxInOld)) {
           // New element
           api.insertBefore(
@@ -302,8 +322,10 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
           );
           newStartVnode = newCh[++newStartIdx];
         } else {
+          // 如果是已经存在的节点 找到需要移动位置的节点
           elmToMove = oldCh[idxInOld];
           if (elmToMove.sel !== newStartVnode.sel) {
+            // 虽然 key 相同了，但是 seletor 不相同，需要调用 createElm 来创建新的 dom 节点
             api.insertBefore(
               parentElm,
               createElm(newStartVnode, insertedVnodeQueue),
@@ -311,6 +333,7 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
             );
           } else {
             patchVnode(elmToMove, newStartVnode, insertedVnodeQueue);
+            // 在 oldCh 中将当前已经处理的 vnode 置空，等下次循环到这个下标的时候直接跳过
             oldCh[idxInOld] = undefined as any;
             api.insertBefore(
               parentElm,
@@ -322,6 +345,8 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
         }
       }
     }
+    // 循环结束后，可能会存在两种情况
+    // 1. oldCh 已经全部处理完成，而 newCh 还有新的节点，需要对剩下的每个项都创建新的 dom
     if (oldStartIdx <= oldEndIdx || newStartIdx <= newEndIdx) {
       if (oldStartIdx > oldEndIdx) {
         before = newCh[newEndIdx + 1] == null ? null : newCh[newEndIdx + 1].elm;
@@ -334,6 +359,7 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
           insertedVnodeQueue
         );
       } else {
+        // 2. newCh 已经全部处理完成，而 oldCh 还有旧的节点，需要将多余的节点移除
         removeVnodes(parentElm, oldCh, oldStartIdx, oldEndIdx);
       }
     }
@@ -362,8 +388,10 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
       i = vnode.data.hook;
       if (isDef(i) && isDef((i = i.update))) i(oldVnode, vnode);
     }
+    // patch vnode 的时候 text 的优先级更高
     if (isUndef(vnode.text)) {
       if (isDef(oldCh) && isDef(ch)) {
+        // 新的 vnode 子节点更新
         if (oldCh !== ch)
           updateChildren(
             elm,
@@ -392,6 +420,7 @@ export function init(modules: Array<Partial<Module>>, domApi?: DOMAPI) {
         api.setTextContent(elm, "");
       }
     } else if (oldVnode.text !== vnode.text) {
+      // 新的 vnode 是个文本，删除旧的 DOM 元素
       if (isDef(oldCh)) {
         removeVnodes(
           elm,
